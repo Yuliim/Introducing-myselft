@@ -23,6 +23,8 @@ for (const [label, value, prefix] of [['이메일', config.email, 'mailto:'], ['
 const form = document.querySelector('#guestbook-form');
 const status = document.querySelector('#status');
 const entries = document.querySelector('#entries');
+let loadVersion = 0;
+const confirmedEntries = new Map();
 const ready = /^https:\/\/.+\.appsync-api\..+\.amazonaws\.com\/graphql$/.test(config.graphqlEndpoint || '') && !!config.apiKey;
 const message = document.querySelector('#message');
 message.addEventListener('input', () => { document.querySelector('#count').textContent = `${message.value.length} / 200`; });
@@ -34,20 +36,28 @@ async function graphql(query, variables = {}) {
 }
 async function loadEntries() {
   if (!ready) { status.textContent = 'AWS 방명록 연결 전입니다. 배포 설정 후 작성과 조회가 활성화됩니다.'; return; }
+  const version = ++loadVersion;
   status.textContent = '방명록을 불러오는 중입니다.';
   try {
     const data = await graphql('query { listGuestbook { guestbookId nickname message createdAt } }');
+    if (version !== loadVersion) return false;
+    // A newly written item can take a moment to appear in the DynamoDB GSI.
+    // Keep only server-confirmed mutations until the index includes them.
+    for (const entry of data.listGuestbook) confirmedEntries.delete(entry.guestbookId);
+    const merged = new Map(data.listGuestbook.map(entry => [entry.guestbookId, entry]));
+    for (const [id, entry] of confirmedEntries) merged.set(id, entry);
+    const latest = [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.guestbookId.localeCompare(a.guestbookId)).slice(0, 20);
     entries.replaceChildren();
-    for (const entry of data.listGuestbook) {
+    for (const entry of latest) {
       const li = document.createElement('li');
       const name = document.createElement('strong'); name.textContent = entry.nickname;
       const time = document.createElement('time'); time.dateTime = entry.createdAt; time.textContent = new Date(entry.createdAt).toLocaleString('ko-KR');
       const body = document.createElement('p'); body.textContent = entry.message;
       li.append(name, time, body); entries.append(li);
     }
-    status.textContent = data.listGuestbook.length ? '최신 방명록 최대 20건입니다.' : '첫 번째 방명록을 남겨주세요.';
+    status.textContent = latest.length ? '최신 방명록 최대 20건입니다.' : '첫 번째 방명록을 남겨주세요.';
     return true;
-  } catch { status.textContent = '방명록을 불러오지 못했습니다. 잠시 후 목록 새로고침을 눌러주세요.'; return false; }
+  } catch { if (version === loadVersion) status.textContent = '방명록을 불러오지 못했습니다. 잠시 후 목록 새로고침을 눌러주세요.'; return false; }
 }
 form.addEventListener('submit', async event => {
   event.preventDefault();
@@ -57,7 +67,8 @@ form.addEventListener('submit', async event => {
   if (!ready) return;
   const button = form.querySelector('button'); button.disabled = true; status.textContent = '등록 중입니다.';
   try {
-    await graphql('mutation Add($nickname: String!, $message: String!) { addGuestbook(nickname: $nickname, message: $message) { guestbookId } }', { nickname, message: text });
+    const data = await graphql('mutation Add($nickname: String!, $message: String!) { addGuestbook(nickname: $nickname, message: $message) { guestbookId nickname message createdAt } }', { nickname, message: text });
+    confirmedEntries.set(data.addGuestbook.guestbookId, data.addGuestbook);
     form.reset(); document.querySelector('#count').textContent = '0 / 200';
     const loaded = await loadEntries();
     status.textContent = loaded ? '등록했습니다. 새 글이 목록 맨 위에 반영되었습니다.' : '등록은 완료했지만 목록 조회에 실패했습니다. 목록 새로고침을 눌러주세요.';

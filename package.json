@@ -2,5 +2,5 @@
   "name": "yurim-portfolio",
   "version": "1.0.0",
   "private": true,
-  "scripts": { "dev": "node scripts/serve.mjs", "check": "node --check web/app.js && node --check scripts/serve.mjs" }
+  "scripts": { "dev": "node scripts/serve.mjs", "check": "node --check web/app.js && node --check scripts/serve.mjs && node --check scripts/configure-guestbook.mjs", "test": "node scripts/test-guestbook.mjs" }
 }

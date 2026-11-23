@@ -10,9 +10,9 @@ Node.js가 설치된 PowerShell에서 `npm.cmd run dev` 실행 후 http://127.0.
 
 - 화면, 프로젝트 상세 창, 방명록 클라이언트 구현.
 - S3 퍼블릭 액세스 차단 4개 항목, 암호화, CloudFront OAC, 배포 ARN으로 제한한 버킷 정책을 CloudFormation으로 작성.
-- AWS 리소스 생성·업로드·실제 접속 검증은 아직 수행하지 않음.
-- GitHub 원격 저장소 생성·푸시와 제출용 실제 캡처는 아직 수행하지 않음.
-- 방명록 백엔드는 후속 AppSync + DynamoDB 구현 필요. 현재 로컬 저장이나 가짜 성공 처리는 하지 않음.
+- AWS 리소스 생성 및 웹 파일 업로드 완료. 익명 요청으로 CloudFront HTML/CSS/JS 200, S3 직접 주소 403 확인. 상세 결과: evidence/VERIFICATION.md.
+- GitHub Yuliim/Introducing-myselft main 브랜치에 초기 코드 업로드 완료. 제출용 AWS 설정 캡처는 별도 확보 필요.
+- 방명록 AppSync + DynamoDB 백엔드와 서버 검증을 infra/guestbook.yaml에 구현했습니다. 아직 AWS 배포 및 web/config.js 연결 전이며, 실제 DB 저장 검증은 배포 후 진행합니다. 배포 절차: evidence/GUESTBOOK-DEPLOY.md.
 - 이메일, GitHub 주소, 프로젝트 기간·역할·기술·성과, 자격증은 본인 확인 후 입력 필요.
 
 ## AWS 배포
@@ -56,7 +56,7 @@ type Query { listGuestbook: [Guestbook!]! }
 type Mutation { addGuestbook(nickname: String!, message: String!): Guestbook! }
 ```
 
-서버에서도 trim 후 닉네임 2~20자, 메시지 1~200자를 검증합니다. ID와 createdAt은 서버에서 생성합니다. DynamoDB는 guestbookId를 PK로 유지하고, 최신순 조회를 위해 고정 partition 값과 createdAt 정렬 키를 갖는 GSI를 추가하는 방식을 권장합니다. Query는 ScanIndexForward=false, Limit=20으로 실행합니다. 전체 Scan의 첫 20개를 클라이언트에서 정렬하는 방식은 전체 최신순을 보장하지 못합니다.
+서버에서도 trim 후 닉네임 2~20자, 메시지 1~200자를 검증합니다. ID와 createdAt은 서버에서 생성합니다. DynamoDB는 guestbookId를 PK로 유지하고, 최신순 조회를 위해 feed=PUBLIC 및 sortKey=createdAt#guestbookId를 갖는 ByCreatedAt GSI를 추가했습니다. Query는 scanIndexForward=false, limit=20으로 실행합니다. 작성 직후 GSI에 반영되기 전에는 실제 Mutation 성공 응답을 받은 글을 UI에 병합합니다. `npm.cmd test`는 로컬 에뮬레이션으로 입력 경계값, 서버 생성 필드, 조회 설정, 오류 전파를 확인하며 AWS 배포 검증을 대신하지 않습니다.
 
 ## 참고
 

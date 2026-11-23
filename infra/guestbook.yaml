@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AppSync and DynamoDB guestbook for Yurim portfolio
+Resources:
+  GuestbookTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: guestbookId
+          AttributeType: S
+        - AttributeName: feed
+          AttributeType: S
+        - AttributeName: sortKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: guestbookId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ByCreatedAt
+          KeySchema:
+            - AttributeName: feed
+              KeyType: HASH
+            - AttributeName: sortKey
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+  GuestbookApi:
+    Type: AWS::AppSync::GraphQLApi
+    Properties:
+      Name: !Sub '${AWS::StackName}-api'
+      AuthenticationType: API_KEY
+      IntrospectionConfig: DISABLED
+      QueryDepthLimit: 3
+      ResolverCountLimit: 5
+  GuestbookKey:
+    Type: AWS::AppSync::ApiKey
+    Properties:
+      ApiId: !GetAtt GuestbookApi.ApiId
+      Description: Public browser key for coursework - expires 7 days after creation
+  Schema:
+    Type: AWS::AppSync::GraphQLSchema
+    Properties:
+      ApiId: !GetAtt GuestbookApi.ApiId
+      Definition: |
+        type Guestbook {
+          guestbookId: ID!
+          nickname: String!
+          message: String!
+          createdAt: AWSDateTime!
+        }
+        type Query { listGuestbook: [Guestbook!]! }
+        type Mutation { addGuestbook(nickname: String!, message: String!): Guestbook! }
+        schema { query: Query mutation: Mutation }
+  DataRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: appsync.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GuestbookReadWriteOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:PutItem
+                Resource: !GetAtt GuestbookTable.Arn
+              - Effect: Allow
+                Action: dynamodb:Query
+                Resource: !Sub '${GuestbookTable.Arn}/index/ByCreatedAt'
+  DataSource:
+    Type: AWS::AppSync::DataSource
+    Properties:
+      ApiId: !GetAtt GuestbookApi.ApiId
+      Name: GuestbookDynamoDB
+      Type: AMAZON_DYNAMODB
+      ServiceRoleArn: !GetAtt DataRole.Arn
+      DynamoDBConfig:
+        TableName: !Ref GuestbookTable
+        AwsRegion: !Ref AWS::Region
+  AddResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: Schema
+    Properties:
+      ApiId: !GetAtt GuestbookApi.ApiId
+      TypeName: Mutation
+      FieldName: addGuestbook
+      DataSourceName: !GetAtt DataSource.Name
+      Kind: UNIT
+      Runtime:
+        Name: APPSYNC_JS
+        RuntimeVersion: '1.0.0'
+      Code: |
+        import { util } from '@aws-appsync/utils';
+        export function request(ctx) {
+          const nickname = ctx.args.nickname.trim();
+          const message = ctx.args.message.trim();
+          if (nickname.length < 2 || nickname.length > 20) {
+            util.error('Nickname must contain 2 to 20 characters.', 'ValidationError');
+          }
+          if (message.length < 1 || message.length > 200) {
+            util.error('Message must contain 1 to 200 characters.', 'ValidationError');
+          }
+          const guestbookId = util.autoId();
+          const createdAt = util.time.nowISO8601();
+          return {
+            operation: 'PutItem',
+            key: util.dynamodb.toMapValues({ guestbookId }),
+            attributeValues: util.dynamodb.toMapValues({
+              nickname, message, createdAt, feed: 'PUBLIC',
+              sortKey: createdAt + '#' + guestbookId
+            }),
+            condition: { expression: 'attribute_not_exists(guestbookId)' }
+          };
+        }
+        export function response(ctx) {
+          if (ctx.error) { util.error(ctx.error.message, ctx.error.type); }
+          return ctx.result;
+        }
+  ListResolver:
+    Type: AWS::AppSync::Resolver
+    DependsOn: Schema
+    Properties:
+      ApiId: !GetAtt GuestbookApi.ApiId
+      TypeName: Query
+      FieldName: listGuestbook
+      DataSourceName: !GetAtt DataSource.Name
+      Kind: UNIT
+      Runtime:
+        Name: APPSYNC_JS
+        RuntimeVersion: '1.0.0'
+      Code: |
+        import { util } from '@aws-appsync/utils';
+        export function request(ctx) {
+          return {
+            operation: 'Query', index: 'ByCreatedAt',
+            query: {
+              expression: '#feed = :feed',
+              expressionNames: { '#feed': 'feed' },
+              expressionValues: util.dynamodb.toMapValues({ ':feed': 'PUBLIC' })
+            },
+            scanIndexForward: false, limit: 20, consistentRead: false
+          };
+        }
+        export function response(ctx) {
+          if (ctx.error) { util.error(ctx.error.message, ctx.error.type); }
+          return ctx.result.items;
+        }
+Outputs:
+  GraphqlEndpoint:
+    Value: !GetAtt GuestbookApi.GraphQLUrl
+  BrowserApiKey:
+    Description: Public browser API key; do not confuse with AWS IAM credentials
+    Value: !GetAtt GuestbookKey.ApiKey
+  ApiId:
+    Value: !GetAtt GuestbookApi.ApiId
+  TableName:
+    Value: !Ref GuestbookTable
