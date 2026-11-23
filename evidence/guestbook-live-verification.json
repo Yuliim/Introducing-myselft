@@ -1,0 +1,19 @@
+{
+  "verifiedAt": "2026-11-23T08:28:14.768Z",
+  "endpoint": "https://usnfnia5yrfwboat5t5xdhvaie.appsync-api.eu-north-1.amazonaws.com/graphql",
+  "checks": [
+    "authenticated query",
+    "missing key rejected",
+    "five invalid mutations rejected",
+    "trimmed valid write",
+    "server generated ID and time",
+    "independent query returned saved item",
+    "latest-first and maximum 20"
+  ],
+  "savedTestEntry": {
+    "guestbookId": "7215531d-a3b4-4f2c-90df-a755544fe5f7",
+    "nickname": "연결확인",
+    "message": "AppSync와 DynamoDB 방명록 저장·재조회 검증을 완료했습니다. (2026-11-23T08:28:13.601Z)",
+    "createdAt": "2026-11-23T08:28:14.318Z"
+  }
+}

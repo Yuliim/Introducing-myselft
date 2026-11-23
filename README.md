@@ -12,7 +12,7 @@ Node.js가 설치된 PowerShell에서 `npm.cmd run dev` 실행 후 http://127.0.
 - S3 퍼블릭 액세스 차단 4개 항목, 암호화, CloudFront OAC, 배포 ARN으로 제한한 버킷 정책을 CloudFormation으로 작성.
 - AWS 리소스 생성 및 웹 파일 업로드 완료. 익명 요청으로 CloudFront HTML/CSS/JS 200, S3 직접 주소 403 확인. 상세 결과: evidence/VERIFICATION.md.
 - GitHub Yuliim/Introducing-myselft main 브랜치에 초기 코드 업로드 완료. 제출용 AWS 설정 캡처는 별도 확보 필요.
-- 방명록 AppSync + DynamoDB 백엔드와 서버 검증을 infra/guestbook.yaml에 구현했습니다. 아직 AWS 배포 및 web/config.js 연결 전이며, 실제 DB 저장 검증은 배포 후 진행합니다. 배포 절차: evidence/GUESTBOOK-DEPLOY.md.
+- 방명록 AppSync + DynamoDB 백엔드를 yurim-guestbook 스택으로 배포했습니다. 실제 API에서 정상 저장·독립 요청 재조회, 키 없는 요청 거부, 잘못된 입력 5종 거부를 확인했습니다. web/config.js 연결값을 설정했으며 수정된 app.js·config.js의 S3 업로드와 CloudFront 캐시 갱신이 남았습니다. 검증 결과: evidence/guestbook-live-verification.json. 배포 절차: evidence/GUESTBOOK-DEPLOY.md.
 - 이메일, GitHub 주소, 프로젝트 기간·역할·기술·성과, 자격증은 본인 확인 후 입력 필요.
 
 ## AWS 배포
